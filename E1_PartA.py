@@ -9,11 +9,11 @@ p.start(7.5)
 
 def moveservo():
     while True:
-        angle = input("DegreeAngle:")
+        angle = int(input("DegreeAngle:"))
         if angle<0 and angle>180:
             print("Try again")
         else:
-            p.ChangeDutyCycle(2.5+5(angle/90))
+            p.ChangeDutyCycle(2.5+5*(angle/90))
 
 try:
     moveservo()
