@@ -266,7 +266,7 @@ class AutoNav(Node):
                                 print('.', end="")
                                 # Try again if no card is available.
                                 if uid is None:
-                                    continue
+                                    break
                                 print('Found card with UID:', [hex(i) for i in uid])
                                 self.stopbot()
                         except Exception as e:
