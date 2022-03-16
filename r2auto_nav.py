@@ -129,11 +129,8 @@ class AutoNav(Node):
             'nfc_status',
             self.nfc_callback,
             10)
-        self.nfc_subscription
+        self.nfc_subscription # prevent unused variable warning
         
-        # create publisher for nfc detection
-        # self.nfc_publisher_ = self.create_publisher(String, 'nfc_status', 10)
-        # self.get_logger().info('Created publisher')
         
         
         # Create a subscriber
