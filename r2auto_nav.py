@@ -21,16 +21,20 @@ from sensor_msgs.msg import LaserScan
 from nav_msgs.msg import OccupancyGrid
 from std_msgs.msg import Float64MultiArray, String
 import numpy as np
-import tf2_ros
-from tf2_ros import LookupException, ConnectivityException, ExtrapolationException
-import cv2
 import math
 import cmath
 import time
 
+import tf2_ros
+from tf2_ros import LookupException, ConnectivityException, ExtrapolationException
+import cv2
+
 # constants
 rotatechange = 0.5
 speedchange = 0.15
+
+front_angle = 30
+front_angles = range(-front_angle,front_angle+1,1)
 back_angles = range(150, 210 + 1, 1)
 
 scanfile = 'lidar.txt'
@@ -38,19 +42,21 @@ mapfile = 'map.txt'
 myoccdata = np.array([])
 occ_bins = [-1, 0, 100, 101]
 map_bg_color = 1
-isTargetDetected = False
-isDoneShooting = False
+
 isNFCDetected = False
 isDoneLoading = False
+isTargetDetected = False
+isDoneShooting = False
 
 # To change before starting test
 stopping_time_in_seconds = 540  # 9 minutes
 initial_direction = "Front"  # "Front", "Left", "Right", "Back"
 
+
+
+
 # code from https://automaticaddison.com/how-to-convert-a-quaternion-into-euler-angles-in-python/
-
-
-def euler_from_quaternion(x, y, z, w): #ok
+def euler_from_quaternion(x, y, z, w):
     """
     Convert a quaternion into euler angles (roll, pitch, yaw)
     roll is rotation around x in radians (counterclockwise)
@@ -81,9 +87,8 @@ class AutoNav(Node):
         # create publisher for moving TurtleBot
         self.publisher_ = self.create_publisher(Twist, 'cmd_vel', 10)
         # self.get_logger().info('Created publisher')
-        
-        
-        
+
+
         # create subscription to track orientation
         self.odom_subscription = self.create_subscription(
             Odometry,
@@ -97,8 +102,6 @@ class AutoNav(Node):
         self.pitch = 0
         self.yaw = 0
 
-        
-        
         # create subscription to track occupancy
         self.occ_subscription = self.create_subscription(
             OccupancyGrid,
@@ -108,8 +111,6 @@ class AutoNav(Node):
         self.occ_subscription  # prevent unused variable warning
         self.occdata = np.array([])
 
-        
-        
         # create subscription to track lidar
         self.scan_subscription = self.create_subscription(
             LaserScan,
@@ -120,10 +121,9 @@ class AutoNav(Node):
         self.laser_range = np.array([])
         self.tfBuffer = tf2_ros.Buffer()
         self.tfListener = tf2_ros.TransformListener(self.tfBuffer, self)
-
         
         
-        # create subscription to know if nfc is detected
+        # create subscription to messages from the nfc node
         self.nfc_subscription = self.create_subscription(
             String,
             'nfc_status',
@@ -133,8 +133,7 @@ class AutoNav(Node):
         
         
         
-        # Create a subscriber
-        # Node subscribes to messages from the targeting node
+        # create subscription to messages from the targeting node
         self.targeting_subscription = self.create_subscription(
             String,
             'targeting_status',
@@ -142,7 +141,6 @@ class AutoNav(Node):
             10)
         self.targeting_subscription  # prevent unused variable warning
 
-        
         
         # Create a subscriber
         # This node subscribes to messages of type Float64MultiArray
@@ -161,10 +159,6 @@ class AutoNav(Node):
         
         
         
-        
-        
-        
-    
 
     def odom_callback(self, msg):
         self.get_logger().info('In odom_callback')
@@ -196,8 +190,10 @@ class AutoNav(Node):
             return
         self.occdata = np.uint8(oc2.reshape(msg.info.height, msg.info.width))
         myoccdata = np.uint8(oc2.reshape(msg.info.height, msg.info.width))
+        odata = myoccdata
         np.savetxt(mapfile, self.occdata)
 
+        
     def scan_callback(self, msg):
         # self.get_logger().info('In scan_callback')
         # create numpy array
@@ -206,23 +202,24 @@ class AutoNav(Node):
         np.savetxt(scanfile, self.laser_range)
         # replace 0's with nan
         self.laser_range[self.laser_range == 0] = np.nan
+        
 
         
-        
-    def state_estimate_callback(self, msg):
-        """
-        Extract the position and orientation data.
-        This callback is called each time
-        a new message is received on the '/en613/state_est' topic
-        """
-        # Update the current estimated state in the global reference frame
-        curr_state = msg.data
-        self.current_x = curr_state[0]
-        self.current_y = curr_state[1]
-        self.current_yaw = curr_state[2]
-
-        
-        
+    def nfc_callback(self, msg):
+        global isNFCDetected, isDoneLoading
+        self.get_logger().info('In nfc_callback')
+        #self.get_logger().info('I heard: "%s"' % msg.data)
+        if (msg.data == 'DetectedNFC'):
+            print('NFC Detected')
+            isNFCDetected = True
+        elif (msg.data == 'DoneLoading'):
+            print('Is Done Loading')
+            isDoneLoading = True
+        else:
+            print('No NFC Detected')
+            isNFCDetected = False
+            
+    
     def target_callback(self, msg):
         global isTargetDetected, isDoneShooting
         self.get_logger().info('In target_callback')
@@ -238,18 +235,21 @@ class AutoNav(Node):
         else:
             print('No Target Detected')
             isTargetDetected = False
-        
-     def nfc_callback(self, msg):
-        global isTargetDetected, isDoneShooting
-        self.get_logger().info('In nfc_callback')
-        #self.get_logger().info('I heard: "%s"' % msg.data)
-        if (msg.data == 'Detected'):
-            print('NFC Detected')
-            isNFCDetected = True
-        else:
-            print('No NFC Detected')
-            isNFCDetected = False
-        
+
+            
+    def state_estimate_callback(self, msg):
+        """
+        Extract the position and orientation data.
+        This callback is called each time
+        a new message is received on the '/en613/state_est' topic
+        """
+        # Update the current estimated state in the global reference frame
+        curr_state = msg.data
+        self.current_x = curr_state[0]
+        self.current_y = curr_state[1]
+        self.current_yaw = curr_state[2]        
+            
+            
     # function to rotate the TurtleBot
 
     def rotatebot(self, rot_angle):
@@ -304,7 +304,6 @@ class AutoNav(Node):
         # stop the rotation
         self.publisher_.publish(twist)
 
-        
         
         
     def pick_direction(self):
@@ -397,8 +396,6 @@ class AutoNav(Node):
         # time.sleep(1)
         self.publisher_.publish(twist)
 
-        
-        
     def initialmove(self):
         self.get_logger().info('In initialmove, move backwards')
         # publish to cmd_vel to move TurtleBot
@@ -491,7 +488,7 @@ class AutoNav(Node):
             return False
 
     def mover(self):
-        global myoccdata, isTargetDetected, isDoneShooting
+        global myoccdata, isNFCDetected, isDoneLoading, isTargetDetected, isDoneShooting
         try:
             rclpy.spin_once(self)
 
@@ -499,38 +496,59 @@ class AutoNav(Node):
             while (self.laser_range.size == 0):
                 print("Spin to get a valid lidar data")
                 rclpy.spin_once(self)
+            
+            # initialize variable to write elapsed time to file
             contourCheck = 1
             start_time = time.time()
 
             # initial move to find the appropriate wall to follow
             self.initialmove()
+            
             # start wall follow logic
             self.pick_direction()
+            
+            
+            while rclpy.ok():
+                if self.laser_range.size != 0:
+                    
+                    elapsed_time = time.time() - start_time
+                    if elapsed_time > stopping_time_in_seconds:
+                        print("Specified time has passed. Automatically shutting down.")
+                        break
+                    
+                    # while there is no nfc detected, keep picking direction (do wall follow)
+                    
+                    if not isNFCDetected:
+                        self.pick_direction()
+                    else:
+                        self.stopbot()
+                        while (not isDoneLoading):
+                            print('In mover, nfc detected.')
+                            rclpy.spin_once(self)
+                        break
+                # allow the callback functions to run
+                rclpy.spin_once(self)
+                
+                
 
             while rclpy.ok():
                 if self.laser_range.size != 0:
 
-                    # Uncomment this part and tab it accordingly
-                    # to enable auto_checking if the map is complete
-                    # using closure function
-                    # The reliableness of this part can be improved
-
-                    # if contourCheck and len(myoccdata) != 0:
-                    # print("Inside contourCheck:")
-                    # if self.closure():
-                    # self.stopbot()
-                    # print("Inside selfclosure contourcheck:")
-                    # map is complete, so save current time into file
-                    # with open("maptime.txt", "w") as f:
-                    # f.write("Elapsed Time: " +
-                    # str(time.time() - start_time))
-                    # contourCheck = 0
-                    # save the map
-                    # cv2.imwrite('mazemap.png', myoccdata)
-                    # print("Map is complete!")
-                    # if isDoneShooting:
-                    # print("I'm done shooting and my map is complete!")
-                    # break
+                    if contourCheck and len(myoccdata) != 0:
+                        print("Inside contourCheck:")
+                        if self.closure():
+                            self.stopbot()
+                            print("Inside selfclosure contourcheck:")
+                            # map is complete, so save current time into file
+                            with open("maptime.txt", "w") as f:
+                                f.write("Elapsed Time: " + str(time.time() - start_time))
+                                contourCheck = 0
+                            # save the map
+                            cv2.imwrite('mazemap.png', myoccdata)
+                            print("Map is complete!")
+                            if isDoneShooting:
+                                print("I'm done shooting and my map is complete!")
+                                break
 
                     elapsed_time = time.time() - start_time
                     if elapsed_time > stopping_time_in_seconds:
@@ -538,18 +556,6 @@ class AutoNav(Node):
                             "Specified time has passed. Automatically shutting down.")
                         break
 
-                        
-                    if not isNFCDetected:
-                        self.pick_direction()
-                    
-                    else:
-                        self.stopbot()
-                        while (not isDoneLoading):
-                            print('In mover, NFC detected.')
-                            rclpy.spin_once(self)
-                        isNFCDetected = False
-                        
-                        
                     # while there is no target detected, keep picking direction (do wall follow)
                     if not isTargetDetected:
                         self.pick_direction()
