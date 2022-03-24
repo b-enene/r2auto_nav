@@ -224,11 +224,11 @@ class AutoNav(Node):
         global isTargetDetected, isDoneShooting
         self.get_logger().info('In target_callback')
         self.get_logger().info('I heard: "%s"' % msg.data)
-        if (msg.data == 'Detected'):
+        if (msg.data == 'DetectedTarget'):
             print('Target Detected')
             isTargetDetected = True
             isDoneShooting = False
-        elif (msg.data == 'Done'):
+        elif (msg.data == 'DoneShooting'):
             print('Is Done shooting')
             isDoneShooting = True
             isTargetDetected = False
